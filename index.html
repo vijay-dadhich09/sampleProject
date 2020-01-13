@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="canonical" href="container.htm"/>
+    <title>BazaarVoice Integration</title>
+</head>
+<!-- bazaarVoiceContainer UI is rendered based on this container ID -->
+<body id="bazaarVoiceContainer">
+  <!-- placeholder container to add summary UI
+  data-bv-product-id is replaced from URL query param in script below-->
+    <div id='BVRRContainer'
+        data-bv-show="">
+    </div>
+
+  <!-- placeholder container to add Spotlight carousel
+  data-bv-subject-id is replaced from URL query param in script below-->
+    <div id='BVSContainer' data-bv-show="" data-bv-subject-id="" data-bv-site-id="Spotlights"></div>
+
+    <script type="text/javascript">
+      // Utility to get params from query string
+      const getUrlVars = () => {
+        const vars = {};
+        window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, (
+          m,
+          key,
+          value
+        ) => {
+          vars[key] = value;
+        });
+        return vars;
+      }
+      const queryParams = getUrlVars();
+      const {
+        bvaction,
+        bvproductId: ratingsProductId,
+        env: environment,
+        instance: deploymentZone,
+        categoryId
+      } = queryParams;
+      const bvContainer =  'BVRRContainer';
+      const spotlightContainer = 'BVSContainer';
+
+      let isSubmitPage = false;
+      let isSpotlightPage = false;
+      let isReviewRatingPage = false;
+
+      const scriptUrl = `https://apps.bazaarvoice.com/deployments/childrensplace/${deploymentZone}/${environment}/en_US/bv.js`;
+
+      if(bvaction === 'rr_submit_review') {
+        isSubmitPage = true;
+      } else if(bvaction === 'bv_spotlight') {
+        isSpotlightPage = true;
+      } else {
+        isReviewRatingPage = true;
+      }
+
+      if(isReviewRatingPage) {
+        document.getElementById(bvContainer).setAttribute('data-bv-show', 'reviews');
+        // replace product ID dynamically in HTML
+        document.getElementById(bvContainer).setAttribute('data-bv-product-id', ratingsProductId);
+      }
+      if(isSpotlightPage) {
+        document.getElementById(spotlightContainer).setAttribute('data-bv-show', 'spotlights');
+        // replace category ID dynamically in HTML
+        document.getElementById(spotlightContainer).setAttribute('data-bv-subject-id', `SL-${categoryId}`);
+      }
+
+      const loadScript = (url, callback) => {
+        const script = document.createElement("script");
+        script.type = "text/javascript";
+
+        if (script.readyState){  // IE
+            script.onreadystatechange = () => {
+              if (script.readyState === "loaded" ||
+                      script.readyState === "complete"){
+                  script.onreadystatechange = null;
+                  callback();
+              }
+            };
+        } else {  // Others
+          script.onload = () => {
+            callback();
+            window.onload = () => {
+              const webViewHeight = Math.max(document.documentElement.clientHeight, document.documentElement.scrollHeight, document.body.clientHeight, document.body.scrollHeight, window.innerHeight, window.outerHeight);
+              alert(`webViewHeight: ${webViewHeight}`);
+              // passing bazar voice final height
+              if(window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ webViewHeight }));
+              }
+            }
+          };
+        }
+
+        script.src = url;
+        document.getElementsByTagName("head")[0].appendChild(script);
+      }
+
+      // load BV js synchronously and invoke BV code
+      loadScript(scriptUrl, (() => {
+
+
+      // override BV write a review click behavior
+      const handleWriteReviewClick = event => {
+        if(window.ReactNativeWebView) {
+          // communicate with App to notify user clicked on write a review cta
+          event.preventDefault();
+          event.stopPropagation();
+          window.ReactNativeWebView.postMessage("writeReview");
+        }
+      }
+
+      // *** code to observe DOM mutation and add custom handlers start ***
+      const targetNode = document.getElementById('bazaarVoiceContainer');
+      // Options for the observer (which mutations to observe)
+      const config = { attributes: true, childList: true, subtree: true };
+      // Callback function to execute when mutations are observed
+      const callback = mutationsList =>  {
+        for(let mutation of mutationsList) {
+          if (mutation.type === 'childList') {
+              if(isSubmitPage && document.querySelector('button.bv-mbox-close')) {
+                document.querySelector('button.bv-mbox-close').remove();
+              }
+              if(isReviewRatingPage && document.querySelector('button.bv-write-review')) {
+                document.querySelector('button.bv-write-review').addEventListener('click', handleWriteReviewClick);
+              }
+              if(isReviewRatingPage && document.querySelector('div.bv-content-placeholder')) {
+                document.querySelector('div.bv-content-placeholder').addEventListener('click', handleWriteReviewClick);
+              }
+            }
+          }
+        }
+      // Create an observer instance linked to the callback function
+      const observer = new MutationObserver(callback);
+      // Start observing the target node for configured mutations
+      observer.observe(targetNode, config);
+      // *** code to observe DOM mutation and add custom handlers end ***
+
+      if(isSubmitPage) {
+        $BV.container('global', {} );
+      }
+    }));
+
+    </script>
+
+</body>
+</html>
+<!-- test Url Review: http://test5.childrensplace.com/static/bazaarVoice/index.html?bvproductId=2043572&env=staging&instance=main_implementation_app -->
+<!-- test Url Form: https://display.ugc.bazaarvoice.com/static/ChildrensPlace/main_implementation_app/en_US/container.htm?bvaction=rr_submit_review&bvproductId=2043572&bvuserToken=dfdsfsdfsdfsf&bvproductId=2043572&env=staging&instance=main_implementation_app -->
+<!-- test Url Spotlight: http://test5.childrensplace.com/static/bazaarVoice/index.html?bvaction=bv_spotlight&env=staging&instance=spotlights&categoryId=47544 -->
